@@ -147,6 +147,11 @@
       color: #16a34a
     }
 
+    [data-theme="light"] .b-score-high {
+      background: rgba(22, 163, 74, .12);
+      color: #16a34a
+    }
+
     [data-theme="light"] .b-nc {
       background: rgba(217, 119, 6, .12);
       color: #b45309
@@ -785,8 +790,14 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--r);
-      overflow: hidden;
+      overflow: visible;
       margin-bottom: 20px
+    }
+
+    .table-card > table,
+    .table-card > div > table {
+      overflow: hidden;
+      border-radius: var(--r)
     }
 
     .table-header {
@@ -878,6 +889,12 @@
     .b-conf {
       background: rgba(255, 208, 0, .15);
       color: var(--accent)
+    }
+
+    /* Score numérique ≥90% : vert */
+    .b-score-high {
+      background: rgba(34, 197, 94, .15);
+      color: #22c55e
     }
 
     .b-nc {
@@ -3457,7 +3474,7 @@ Excès de directivité`,
       // Rows
       document.getElementById('heval-tbody').innerHTML = list.length ? list.map(e => {
         const pct = parseFloat(e['POURCENTAGE_NET']) * 100 || 0;
-        const cls = pct >= 90 ? 'b-conf' : pct >= 70 ? 'b-nc' : 'b-si';
+        const cls = pct >= 90 ? 'b-score-high' : pct >= 70 ? 'b-nc' : 'b-si';
         const agName = (function () { var _u = DB.users.find(u => String(u['LOGIN'] || '').trim() === String(e['LOGIN_AGENT'] || '').trim()); return _u ? _u['NOM_PRENOM'] : e['LOGIN_AGENT']; })();
         const sel = _hevalSelected.has(e['EVAL_ID']);
         return `<tr style="cursor:pointer;${sel ? 'background:rgba(255,208,0,.05)' : ''}" onclick="hevalRowClick(event,'${e['EVAL_ID']}')">
@@ -4394,9 +4411,15 @@ Excès de directivité`,
 
 
       // ── Quartiles PERFORMANCE : Q1=meilleurs scores, Q4=moins bons ──
-      // Tri décroissant : les meilleurs en premier → Q1 prend le top 25%
-      const _agScores = allLogins.map(l => {
-        const evs = myEvals.filter(e => String(e['LOGIN_AGENT'] || '').trim() === l);
+      // IMPORTANT : les quartiles sont TOUJOURS calculés sur tous les agents actifs (sans filtre équipe)
+      // Seul le filtre de période s'applique pour être cohérent avec la vue conseiller
+      const _allActiveLogins = getMyAgentLogins(); // tous agents actifs, sans filtre équipe/agent
+      const _allEvalsForQ = applyPeriodFilter(
+        DB.evals.filter(e => _allActiveLogins.includes(String(e['LOGIN_AGENT'] || '').trim())),
+        'DATE_APPEL', 'dash-period-wrap'
+      );
+      const _agScores = _allActiveLogins.map(l => {
+        const evs = _allEvalsForQ.filter(e => String(e['LOGIN_AGENT'] || '').trim() === l);
         const sc = evs.map(e => parseFloat(e['POURCENTAGE_NET']) * 100 || 0).filter(s => s > 0);
         const agAvg = sc.length ? sc.reduce((a, b) => a + b, 0) / sc.length : null;
         return { login: l, avg: agAvg, evals: evs.length };
@@ -4406,8 +4429,8 @@ Excès de directivité`,
       const _q1end = Math.ceil(_n * 0.25), _q2end = Math.ceil(_n * 0.5), _q3end = Math.ceil(_n * 0.75);
       // Q1 = top 25% (meilleurs), Q4 = bottom 25% (moins bons)
       const _qGroups = [
-        { label: 'Q1', sublabel: '25% supérieurs', color: 'var(--accent)', agents: _agScores.slice(0, _q1end) },
-        { label: 'Q2', sublabel: '50 – 75%', color: 'var(--accent2)', agents: _agScores.slice(_q1end, _q2end) },
+        { label: 'Q1', sublabel: '25% supérieurs', color: '#22c55e', agents: _agScores.slice(0, _q1end) },
+        { label: 'Q2', sublabel: '50 – 75%', color: 'var(--accent)', agents: _agScores.slice(_q1end, _q2end) },
         { label: 'Q3', sublabel: '25 – 50%', color: 'var(--warn)', agents: _agScores.slice(_q2end, _q3end) },
         { label: 'Q4', sublabel: '25% inférieurs', color: 'var(--danger)', agents: _agScores.slice(_q3end) },
       ];
@@ -4497,7 +4520,7 @@ Excès de directivité`,
         const sc = evs.map(e => parseFloat(e['POURCENTAGE_NET']) * 100 || 0).filter(s => s > 0);
         const agAvg = sc.length ? (sc.reduce((a, b) => a + b, 0) / sc.length).toFixed(1) : null;
         const agSI = mySI.filter(s => String(s['LOGIN_AGENT'] || '').trim() === l).length;
-        const cls = agAvg === null ? '' : agAvg >= 90 ? 'b-conf' : agAvg >= 70 ? 'b-nc' : 'b-si';
+        const cls = agAvg === null ? '' : agAvg >= 90 ? 'b-score-high' : agAvg >= 70 ? 'b-nc' : 'b-si';
         const nom = (ag && ag['NOM_PRENOM']) || l;
         if (sEquipe && !nom.toLowerCase().includes(sEquipe.toLowerCase()) && !l.includes(sEquipe)) return '';
         // Determine agent quartile
@@ -4778,7 +4801,7 @@ Excès de directivité`,
       const myEvals = window._dashQEvals || [];
       const period = window._dashPeriod || 'all';
 
-      const qColors = { Q1: '#ff4d6d', Q2: '#ff8c00', Q3: '#e6b800', Q4: '#FFD000' };
+      const qColors = { Q1: '#22c55e', Q2: '#FFD000', Q3: '#ff8c00', Q4: '#ff4d6d' };
       const clrLine = qColors[qLabel] || '#FFD000';
 
       const qGroup = qGroups.find(g => g.label === qLabel);
@@ -5119,7 +5142,7 @@ Excès de directivité`,
         const fcr = evs.length ? Math.round(fcrO / evs.length * 100) : null;
         const nom = (ag && ag['NOM_PRENOM']) || l;
         if (sEquipe && !nom.toLowerCase().includes(sEquipe.toLowerCase()) && !l.includes(sEquipe)) return '';
-        const cls = agAvg === null ? '' : agAvg >= 90 ? 'b-conf' : agAvg >= 70 ? 'b-nc' : 'b-si';
+        const cls = agAvg === null ? '' : agAvg >= 90 ? 'b-score-high' : agAvg >= 70 ? 'b-nc' : 'b-si';
         return `<tr>
       <td style="font-family:'DM Mono',monospace;color:var(--text3);font-size:12px">${l}</td>
       <td style="font-weight:600">${nom}</td>
@@ -5306,7 +5329,7 @@ Excès de directivité`,
 
     function renderMesResultats() {
       if (!_pickerState['ag-period-wrap']) {
-        initPeriodPicker('ag-period-wrap', renderMesResultats, 'all');
+        initPeriodPicker('ag-period-wrap', renderMesResultats, 'month');
       }
       const myLogin = CU && CU.login;
       const allMyEvals = DB.evals.filter(e => String(e['LOGIN_AGENT'] || '').trim() === myLogin);
@@ -5352,8 +5375,8 @@ Excès de directivité`,
 
       // COL 1 — Notes par critère
       _renderAgCriteres(periodEvals);
-      // COL 2 — Profil
-      _renderAgProfil(allMyEvals);
+      // COL 2 — Profil (passer le filtre période pour que le quartile soit cohérent avec le dashboard)
+      _renderAgProfil(allMyEvals, 'ag-period-wrap');
       // COL 3 — Evolution + SI
       _renderAgEvolution();
       _renderAgSIRecent(mySI);
@@ -5391,21 +5414,41 @@ Excès de directivité`,
       el.innerHTML = html;
     }
 
-    function _renderAgProfil(allEvals) {
+    function _renderAgProfil(allEvals, periodWrapId) {
       const el = document.getElementById('ag-profil');
       if (!el) return;
       // Ancienneté
       const user = DB.users.find(u => String(u['LOGIN'] || '').trim() === (CU && CU.login));
-      const anc = user && user['ANCIENNETE'] ? user['ANCIENNETE'] : '—';
-      // Quartile
-      const allLogins = [...new Set(DB.evals.map(e => String(e['LOGIN_AGENT'] || '').trim()))];
+      const ancRaw = user && (user['ANCIENNETE'] || user['ANCIENNETE_MOIS']);
+      const ancMois = ancRaw !== undefined && ancRaw !== null && ancRaw !== '' ? parseInt(ancRaw, 10) : null;
+      const anc = ancMois === null || isNaN(ancMois) ? '—'
+        : ancMois < 3 ? '< 3 mois'
+        : ancMois < 6 ? '3 – 6 mois'
+        : ancMois < 12 ? '6 – 12 mois'
+        : ancMois < 24 ? '1 – 2 ans'
+        : '> 2 ans';
+      // Quartile — même calcul que la vue admin : agents actifs dans USERS, scores sur évals filtrées par même période
+      const allLogins = DB.users
+        .filter(u => String(u['ACTIF'] || '').toUpperCase() === 'TRUE'
+          && ['conseiller', 'agent'].includes(String(u['ROLE'] || '').toLowerCase()))
+        .map(u => String(u['LOGIN'] || '').trim());
+      // Appliquer le même filtre de période que la page conseiller
+      const allEvalsFiltered = periodWrapId ? applyPeriodFilter(DB.evals, 'DATE_APPEL', periodWrapId) : DB.evals;
       const avgByAgent = allLogins.map(l => {
-        const sc = DB.evals.filter(e => String(e['LOGIN_AGENT'] || '').trim() === l).map(e => parseFloat(e['POURCENTAGE_NET']) * 100 || 0).filter(s => s > 0);
+        const sc = allEvalsFiltered.filter(e => String(e['LOGIN_AGENT'] || '').trim() === l).map(e => parseFloat(e['POURCENTAGE_NET']) * 100 || 0).filter(s => s > 0);
         return { l, avg: sc.length ? sc.reduce((a, b) => a + b, 0) / sc.length : null };
       }).filter(x => x.avg !== null).sort((a, b) => b.avg - a.avg);
       const myRank = avgByAgent.findIndex(x => x.l === (CU && CU.login)) + 1;
       const total = avgByAgent.length;
-      const q = myRank > 0 && total > 0 ? Math.ceil(myRank / total * 4) : null;
+      // Même algorithme que le dashboard admin : découpage par tranches Math.ceil(n*0.25)
+      // Q1=top 25%, Q2=25-50%, Q3=50-75%, Q4=bottom 25%
+      let q = null;
+      if (myRank > 0 && total > 0) {
+        const _q1end = Math.ceil(total * 0.25);
+        const _q2end = Math.ceil(total * 0.50);
+        const _q3end = Math.ceil(total * 0.75);
+        q = myRank <= _q1end ? 1 : myRank <= _q2end ? 2 : myRank <= _q3end ? 3 : 4;
+      }
       const qClr = q === 1 ? '#22c55e' : q === 2 ? 'var(--accent)' : q === 3 ? 'var(--warn)' : 'var(--danger)';
 
       // Points forts / axes
@@ -5419,11 +5462,14 @@ Excès de directivité`,
       const forts = sorted.filter(([, s]) => s.pct >= 85).slice(-3).reverse();
       const axes = sorted.filter(([, s]) => s.pct < 85).slice(0, 3);
 
+      const periodLblQ = periodWrapId && typeof getPrecisePeriodLabel === 'function' ? getPrecisePeriodLabel(periodWrapId) : '';
       let html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
         + '<div><div style="font-size:14px;font-weight:700">' + (CU && CU.nom || '—') + '</div>'
         + '<div style="font-size:11px;color:var(--text3);margin-top:3px">Ancienneté : ' + anc + '</div></div>'
         + (q ? '<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:' + qClr + '">Q' + q + '</div>'
-          + '<div style="font-size:10px;color:var(--text3)">#' + myRank + ' / ' + total + '</div></div>' : '')
+          + '<div style="font-size:10px;color:var(--text3)">#' + myRank + ' / ' + total + '</div>'
+          + (periodLblQ ? '<div style="font-size:9px;color:var(--text3);margin-top:2px;opacity:.7">' + periodLblQ + '</div>' : '')
+          + '</div>' : '')
         + '</div>';
 
       if (forts.length) {
@@ -5904,19 +5950,26 @@ Excès de directivité`,
       const tip = lbl.querySelector('.tip');
       if (!tip) return;
       const rect = lbl.getBoundingClientRect();
-      const tipW = 220, tipH = 120;
+      // Measure actual tip size after making it briefly visible for measurement
+      tip.style.display = 'block';
+      tip.style.visibility = 'hidden';
+      tip.style.top = '0px';
+      tip.style.left = '0px';
+      const tipW = tip.offsetWidth || 220;
+      const tipH = tip.offsetHeight || 120;
       const margin = 8;
-      // Default: above the button
-      let top = rect.top - tipH - 8;
+      // Prefer above the button; fall back to below if not enough space above
+      const spaceAbove = rect.top - margin;
+      let top = spaceAbove >= tipH + 8 ? rect.top - tipH - 8 : rect.bottom + 8;
+      // Clamp within viewport vertically
+      if (top + tipH > window.innerHeight - margin) top = window.innerHeight - tipH - margin;
+      if (top < margin) top = margin;
+      // Center horizontally on the button, clamp to viewport
       let left = rect.left + rect.width / 2 - tipW / 2;
-      // If not enough space above, show below
-      if (top < margin) top = rect.bottom + 8;
-      // Clamp horizontally within viewport
       if (left < margin) left = margin;
       if (left + tipW > window.innerWidth - margin) left = window.innerWidth - tipW - margin;
       tip.style.top = top + 'px';
       tip.style.left = left + 'px';
-      tip.style.display = 'block';
       tip.style.visibility = 'visible';
     });
 
