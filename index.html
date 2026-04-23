@@ -5324,7 +5324,7 @@ Excès de directivité`,
         const b = document.getElementById('ag-gran-' + g);
         if (b) { b.style.background = g === gran ? 'var(--accent)' : 'none'; b.style.color = g === gran ? '#000' : 'var(--text3)'; }
       });
-      _renderAgEvolution();
+      _renderAgEvolution(window._agPeriodEvals);
     }
 
     function renderMesResultats() {
@@ -5374,11 +5374,12 @@ Excès de directivité`,
       }).join('');
 
       // COL 1 — Notes par critère
+      window._agPeriodEvals = periodEvals; // cache pour agSetGran
       _renderAgCriteres(periodEvals);
-      // COL 2 — Profil (passer le filtre période pour que le quartile soit cohérent avec le dashboard)
-      _renderAgProfil(allMyEvals, 'ag-period-wrap');
+      // COL 2 — Profil : periodEvals pour points forts/axes, periodWrapId pour le quartile global
+      _renderAgProfil(periodEvals, 'ag-period-wrap');
       // COL 3 — Evolution + SI
-      _renderAgEvolution();
+      _renderAgEvolution(periodEvals);
       _renderAgSIRecent(mySI);
     }
 
@@ -5451,7 +5452,7 @@ Excès de directivité`,
       }
       const qClr = q === 1 ? '#22c55e' : q === 2 ? 'var(--accent)' : q === 3 ? 'var(--warn)' : 'var(--danger)';
 
-      // Points forts / axes
+      // Points forts / axes — basés sur les évals de la période sélectionnée
       const critStats = {};
       Object.keys(RECO_MESSAGES).forEach(k => {
         const evs = allEvals.filter(e => e['EVAL_' + k] && e['EVAL_' + k] !== '');
@@ -5461,6 +5462,7 @@ Excès de directivité`,
       const sorted = Object.entries(critStats).filter(([, s]) => s.total > 0).sort(([, a], [, b]) => (a.pct ?? 999) - (b.pct ?? 999));
       const forts = sorted.filter(([, s]) => s.pct >= 85).slice(-3).reverse();
       const axes = sorted.filter(([, s]) => s.pct < 85).slice(0, 3);
+      const hasData = sorted.length > 0;
 
       const periodLblQ = periodWrapId && typeof getPrecisePeriodLabel === 'function' ? getPrecisePeriodLabel(periodWrapId) : '';
       let html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
@@ -5491,14 +5493,19 @@ Excès de directivité`,
             + '<div style="font-size:11px;color:var(--text3);line-height:1.6">' + RECO_MESSAGES[k].conseil + '</div></div>';
         });
       }
+      if (!hasData) {
+        html += '<div style="padding:16px 0;text-align:center;color:var(--text3);font-size:11px">Aucune évaluation sur cette période —<br>changez la période pour voir vos points forts.</div>';
+      }
       el.innerHTML = html;
     }
 
-    function _renderAgEvolution() {
+    function _renderAgEvolution(periodEvals) {
       const el = document.getElementById('ag-evolution');
       if (!el) return;
       const myLogin = CU && CU.login;
-      const myEvals = DB.evals.filter(e => String(e['LOGIN_AGENT'] || '').trim() === myLogin);
+      const myEvals = periodEvals
+        ? periodEvals.filter(e => String(e['LOGIN_AGENT'] || '').trim() === myLogin)
+        : DB.evals.filter(e => String(e['LOGIN_AGENT'] || '').trim() === myLogin);
       const gran = _agGran || 'week';
       const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
       const byBucket = {};
