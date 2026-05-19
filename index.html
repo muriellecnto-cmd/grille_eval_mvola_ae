@@ -5767,8 +5767,8 @@ Excès de directivité`,
       }
 
       const total = DB.users.length;
-      const agents = DB.users.filter(u => String(u['ROLE'] || '').toLowerCase() === 'agent').length;
-      const managers = DB.users.filter(u => String(u['ROLE'] || '').toLowerCase() === 'manager').length;
+      const agents = DB.users.filter(u => String(u['ROLE'] || '').toLowerCase() === 'conseiller').length;
+      const managers = DB.users.filter(u => String(u['ROLE'] || '').toLowerCase() === 'manager coach').length;
       const admins = DB.users.filter(u => String(u['ROLE'] || '').toLowerCase() === 'admin').length;
       const actifs = DB.users.filter(u => String(u['ACTIF'] || '').toUpperCase() === 'TRUE').length;
 
